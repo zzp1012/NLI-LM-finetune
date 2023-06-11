@@ -101,7 +101,7 @@ class NLIDataset(Dataset):
         return {
             "id": row['id'],
             **self.vectorizer.vectorize(row['sentence']),
-            "label": row['label'] if 'label' in row else None
+            **({"label": row['label']} if 'label' in row else {})
         }
     
     def preprocess(self, data_df: pd.DataFrame) -> pd.DataFrame:
@@ -143,9 +143,9 @@ class NLIDataset(Dataset):
         # change the label to 0, 1, 2
         if 'label' in data.columns:
             data['label'] = data['label'].map({
-                'entailment': 0, 
-                'neutral': 1, 
-                'contradiction': 2
+                'contradiction': 0,
+                'entailment': 1, 
+                'neutral': 2, 
             })
             # check the label
             assert data['label'].isin([0, 1, 2]).all()

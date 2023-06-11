@@ -13,16 +13,13 @@ class BERTNLIClassifier(nn.Module):
         Args:
             hidden_size (int): hidden size
             num_classes (int): number of classes
-            gpt2_model_name (str, optional): GPT2 model name. Defaults to "gpt2".
+            bert_model_name (str, optional): bert model name. Defaults to "bert-base-uncased".
         """
         super(BERTNLIClassifier, self).__init__()
         
         self.bert = BertModel.from_pretrained(bert_model_name)
         hidden_size = self.bert.config.hidden_size
-        self.classifier = nn.Sequential(
-            nn.Linear(hidden_size, num_classes),
-            nn.Softmax(dim=1)
-        )
+        self.nli_head = nn.Linear(hidden_size, num_classes)
 
     def forward(self, ids: torch.Tensor, types: torch.Tensor, masks: torch.Tensor):
         """Forward pass
@@ -37,4 +34,4 @@ class BERTNLIClassifier(nn.Module):
         """
         output = self.bert(ids, token_type_ids=types, attention_mask=masks)
         pooled_output = output[1]
-        return self.classifier(pooled_output)
+        return self.nli_head(pooled_output)

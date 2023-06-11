@@ -15,6 +15,35 @@ from utils import get_datetime, set_logger, get_logger, set_seed, set_device, \
     log_settings, save_current_src
 from utils.avgmeter import MetricTracker
 
+def evaluate(model: nn.Module,
+             dataloader: DataLoader,
+             device: torch.device,) -> float:
+    """evaluate the model
+
+    Args:
+        model (nn.Module): the model to evaluate
+        dataloader (DataLoader): the dataloader
+        device (torch.device): GPU or CPU
+    
+    Returns:
+        float: the accuracy
+    """
+    model.eval()
+    correct, total = 0, 0
+    with torch.no_grad():
+        for batch_idx, entries in enumerate(tqdm(dataloader)):
+            ids, input_ids, types, masks, labels = entries.values()
+            # set the inputs to device
+            input_ids, types, masks, labels = \
+                input_ids.to(device), types.to(device), masks.to(device), labels.to(device)
+            # set the outputs
+            outputs = model(input_ids, types, masks)
+            # compute the accuracy
+            correct += (outputs.max(1)[1] == labels).sum().item()
+            total += len(labels)
+    return correct / total
+
+
 def train(save_path: str,
           device: torch.device,
           model: nn.Module,
@@ -101,21 +130,23 @@ def train(save_path: str,
                 "train_acc": (outputs.max(1)[1] == labels).float().mean().item()
             }, n = input_ids.size(0))
 
-            # print the train loss and accuracy
-            logger.info(tracker)
-
         # save the results
         if epoch % steps_saving == 0 or epoch == epochs:
             torch.save(model.state_dict(), 
                        os.path.join(save_path, f"model_epoch{epoch}.pt"))
             tracker.save_to_csv(os.path.join(save_path, f"train.csv"))
+
+    # evaluate the model
+    logger.info("######Evaluate the model on trainset")
+    acc = evaluate(model, trainloader, device)
+    logger.info(f"Trainset Accuracy: {acc}")
         
     # predict the testset
     model.eval()
     with torch.no_grad():
         id_lst, pred_lst = [], []
         for batch_idx, entries in enumerate(tqdm(testloader)):
-            ids, input_ids, types, masks, _ = entries.values()
+            ids, input_ids, types, masks = entries.values()
             # set the inputs to device
             input_ids, types, masks = \
                 input_ids.to(device), types.to(device), masks.to(device)
@@ -131,9 +162,9 @@ def train(save_path: str,
     # using pandas 
     df = pd.DataFrame({"Id": id_lst, "Category": pred_lst})
     df["Category"] = df["Category"].map({
-        0: "entailment", 
-        1: "neutral", 
-        2: "contradiction"
+        0: "contradiction",
+        1: "entailment",
+        2: "neutral",
     })
     df.to_csv(os.path.join(save_path, f"predication.csv"), index=False)
 
@@ -155,6 +186,8 @@ def add_args() -> argparse.Namespace:
                         help='the path of saving results.')
     parser.add_argument("--data_root", default="/home/zhouzhanpeng/NLI-LM-finetune/data", type=str,
                         help='the path of loading data.')
+    parser.add_argument("--resume_path", default=None, type=str,
+                        help='the path of loading model.')
     parser.add_argument("--optimizer", default="AdamW", type=str,
                         help='the optimizer name.')
     parser.add_argument('--epochs', default=10, type=int,
@@ -223,6 +256,8 @@ def main():
     # prepare the model
     logger.info("#########preparing model....")
     model = BERTNLIClassifier(num_classes=3)
+    if args.resume_path is not None:
+        model.load_state_dict(torch.load(args.resume_path))
     logger.info(model)
 
     # train the model
