@@ -1,5 +1,7 @@
 # ignore .outs
 outs/
+# ignore .sh
+*.sh
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
